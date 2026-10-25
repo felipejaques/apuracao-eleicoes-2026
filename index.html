@@ -45,6 +45,9 @@ h1 { margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; te
 .bar .a { background: var(--c22); } .bar .b { background: var(--c13); }
 .nat .bar { height: 26px; }
 .bar .mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--fg); opacity: .55; }
+.lead-line { text-align: center; font-size: .95rem; margin-top: -4px; }
+.lead-line b { font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.lead-line small { color: var(--muted); font-family: var(--mono); font-size: .78rem; margin-left: 6px; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: .85rem; color: var(--muted); }
 .meta b { color: var(--fg); font-variant-numeric: tabular-nums; }
 
@@ -140,6 +143,7 @@ footer code { font-family: var(--mono); font-size: .75rem; word-break: break-all
       <div class="cand r"><span class="nm c13" id="n13">—</span><span class="pct c13" id="p13">—</span><span class="vt" id="v13"></span></div>
     </div>
     <div class="bar"><span class="a" id="ba" style="width:50%"></span><span class="b" id="bb" style="width:50%"></span><i class="mid"></i></div>
+    <div class="lead-line" id="lead"></div>
     <div class="meta">
       <span>Seções totalizadas <b id="mst">—</b></span>
       <span>Votos brancos <b id="mvb">—</b></span>
@@ -365,6 +369,12 @@ function render() {
     const t = a.votos + b.votos || 1;
     $("ba").style.width = a.votos / t * 100 + "%";
     $("bb").style.width = b.votos / t * 100 + "%";
+    const frente = a.votos >= b.votos ? a : b, cls = frente === a ? "c22" : "c13";
+    const dif = Math.abs(a.votos - b.votos), pp = Math.abs(a.pct - b.pct);
+    $("lead").innerHTML = dif === 0
+      ? "Empate em votos"
+      : `<span class="${cls}">${frente.nome}</span> à frente por <b class="${cls}">${fmtInt(dif)} votos</b>` +
+        `<small>${pp.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} p.p.</small>`;
     $("mst").textContent = fmtPct(br.pst);
     $("mvb").textContent = fmtPct(br.vb);
     $("mvn").textContent = fmtPct(br.vn);
