@@ -73,6 +73,16 @@ h1 { margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; te
 .legend { display: flex; gap: 16px; font-size: .8rem; color: var(--muted); }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--k); }
 .map-wrap { display: grid; gap: 10px; }
+#evo { width: 100%; height: auto; display: block; }
+#evo .ax text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+#evo .ax .cap { font-size: 10px; }
+#evo .grid { stroke: var(--line); stroke-width: 1; }
+#evo .fifty { stroke: var(--fg); stroke-width: 1; stroke-dasharray: 4 4; opacity: .5; }
+#evo .guide { stroke: var(--muted); stroke-width: 1; }
+#evo .end { font-family: var(--display); font-size: 12px; font-weight: 600; }
+#evo .end .v { font-size: 15px; font-weight: 800; }
+.evo-card { justify-items: stretch; }
+.evo-card .sub { font-size: .78rem; }
 .map-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; justify-items: center; }
 #map { width: 100%; max-width: 620px; height: auto; display: block; }
 #map path { stroke: var(--surface); stroke-width: 1; cursor: default; transition: fill .6s ease; }
@@ -135,6 +145,21 @@ footer code { font-family: var(--mono); font-size: .75rem; word-break: break-all
       <span>Votos brancos <b id="mvb">—</b></span>
       <span>Votos nulos <b id="mvn">—</b></span>
       <span>Abstenção <b id="mab">—</b></span>
+    </div>
+  </section>
+
+  <section aria-label="Evolução dos candidatos" class="map-wrap">
+    <div class="sec-h">
+      <h2>Evolução</h2>
+      <div class="seg" role="group" aria-label="Eixo horizontal">
+        <button id="x-apu" aria-pressed="true">Por % apurado</button>
+        <button id="x-hora" aria-pressed="false">Por horário</button>
+      </div>
+    </div>
+    <div class="map-card evo-card">
+      <svg id="evo" viewBox="0 0 720 300" role="img" aria-label="Gráfico de linha com o percentual de votos válidos de cada candidato ao longo da apuração"></svg>
+      <span class="sub" id="evo-n"></span>
+      <div class="tip" id="evo-tip" hidden></div>
     </div>
   </section>
 
@@ -227,6 +252,7 @@ async function refresh() {
   const res = await Promise.allSettled(jobs);
   const fails = res.filter(r => r.status === "rejected");
   for (const r of res) if (r.status === "fulfilled") data[r.value[0]] = r.value[1];
+  if (data.br) registra(data.br);
   render();
   const br = data.br;
   $("st").className = fails.length ? "err" : "live";
@@ -234,6 +260,91 @@ async function refresh() {
     ? `${fails.length} arquivo(s) falharam · ${fails[0].reason.message}`
     : `TSE ${br?.hora ?? ""}`;
   countdown = REFRESH;
+}
+
+// ---------- evolução ----------
+// A API do TSE só entrega a fotografia atual; o histórico é montado a cada
+// atualização e guardado neste navegador para sobreviver a recarregamentos.
+const HIST_KEY = "apuracao-6258-historico";
+let hist = [];
+let eixo = "apu";   // "apu" = % apurado, "hora" = horário
+try { hist = JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch { hist = []; }
+
+function registra(br) {
+  if (hist.length && hist[hist.length - 1].h === br.hora) return;
+  const [d, m, y] = br.hora.split(" ")[0].split("/");
+  const t = new Date(`${y}-${m}-${d}T${br.hora.split(" ")[1]}-03:00`).getTime();
+  hist.push({ h: br.hora, t, p: br.pst, a: br.cands["22"].pct, b: br.cands["13"].pct });
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(hist)); } catch {}
+}
+
+function drawEvo() {
+  const svg = d3.select("#evo");
+  svg.selectAll("*").remove();
+  const W = 720, H = 300, m = { t: 16, r: 120, b: 34, l: 48 };
+  if (!data.br) return;
+  const nA = data.br.cands["22"].nome, nB = data.br.cands["13"].nome;
+  $("evo-n").textContent = hist.length === 1
+    ? "1 leitura até agora · a linha aparece a partir da próxima atualização"
+    : `${hist.length} leituras desde ${hist[0].h.split(" ")[1]}`;
+
+  const xv = eixo === "apu" ? (d => d.p) : (d => d.t);
+  const x = eixo === "apu"
+    ? d3.scaleLinear().domain([0, 100]).range([m.l, W - m.r])
+    : d3.scaleTime().domain(d3.extent(hist, d => d.t)).range([m.l, W - m.r]);
+  if (eixo === "hora" && hist.length === 1) x.domain([hist[0].t - 30 * 60000, hist[0].t + 30 * 60000]);
+  const vals = hist.flatMap(d => [d.a, d.b]).concat(50);
+  let lo = d3.min(vals), hi = d3.max(vals);
+  const pad = Math.max(1, (hi - lo) * 0.15);
+  const y = d3.scaleLinear().domain([Math.max(0, lo - pad), Math.min(100, hi + pad)]).nice().range([H - m.b, m.t]);
+
+  const gy = svg.append("g").attr("class", "ax");
+  for (const v of y.ticks(5)) {
+    gy.append("line").attr("class", "grid").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(v)).attr("y2", y(v));
+    gy.append("text").attr("x", m.l - 8).attr("y", y(v)).attr("dy", "0.32em").attr("text-anchor", "end").text(v + "%");
+  }
+  svg.append("line").attr("class", "fifty").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(50)).attr("y2", y(50));
+  const gx = svg.append("g").attr("class", "ax");
+  const xt = eixo === "apu" ? [0, 20, 40, 60, 80, 100] : x.ticks(6);
+  for (const v of xt) {
+    gx.append("text").attr("x", x(v)).attr("y", H - m.b + 18).attr("text-anchor", "middle")
+      .text(eixo === "apu" ? v + "%" : d3.timeFormat("%H:%M")(v));
+  }
+  gx.append("text").attr("x", W - m.r).attr("y", H - 2).attr("text-anchor", "end").attr("class", "cap")
+    .text(eixo === "apu" ? "seções totalizadas" : "horário de Brasília");
+
+  const series = [["a", "var(--c22)", nA], ["b", "var(--c13)", nB]];
+  for (const [k, cor] of series) {
+    svg.append("path").datum(hist).attr("fill", "none").attr("stroke", cor).attr("stroke-width", 2.5)
+      .attr("stroke-linejoin", "round").attr("d", d3.line().x(d => x(xv(d))).y(d => y(d[k])));
+  }
+  // pontos finais com rótulo, afastados se colidirem
+  const last = hist[hist.length - 1];
+  let ya = y(last.a), yb = y(last.b);
+  if (Math.abs(ya - yb) < 30) { const c = (ya + yb) / 2, s = ya < yb ? -1 : 1; ya = c + s * 15; yb = c - s * 15; }
+  for (const [k, cor, nome, ly] of [[...series[0], ya], [...series[1], yb]]) {
+    svg.append("circle").attr("cx", x(xv(last))).attr("cy", y(last[k])).attr("r", 4.5).attr("fill", cor);
+    const t = svg.append("text").attr("class", "end").attr("x", x(xv(last)) + 10).attr("y", ly).attr("fill", cor);
+    t.append("tspan").attr("class", "v").attr("dy", "-0.1em").text(fmtPct(last[k]));
+    t.append("tspan").attr("x", x(xv(last)) + 10).attr("dy", "1.2em").text(nome);
+  }
+
+  // leitura ao passar o mouse
+  const guia = svg.append("line").attr("class", "guide").attr("y1", m.t).attr("y2", H - m.b).style("display", "none");
+  svg.append("rect").attr("x", m.l).attr("y", m.t).attr("width", W - m.l - m.r).attr("height", H - m.t - m.b)
+    .attr("fill", "transparent")
+    .on("mousemove", ev => {
+      const [px] = d3.pointer(ev);
+      const d = hist.reduce((p, c) => Math.abs(x(xv(c)) - px) < Math.abs(x(xv(p)) - px) ? c : p);
+      guia.style("display", null).attr("x1", x(xv(d))).attr("x2", x(xv(d)));
+      const tip = $("evo-tip"), box = $("evo").getBoundingClientRect(), card = tip.parentElement.getBoundingClientRect();
+      tip.innerHTML = `<b>${d.h.split(" ")[1]}</b> · ${fmtPct(d.p)} apurado<br>${nA} ${fmtPct(d.a)}<br>${nB} ${fmtPct(d.b)}`;
+      tip.hidden = false;
+      const sx = box.left - card.left + x(xv(d)) * box.width / W;
+      tip.style.left = Math.max(8, Math.min(sx + 12, card.width - tip.offsetWidth - 8)) + "px";
+      tip.style.top = (box.top - card.top + 8) + "px";
+    })
+    .on("mouseleave", () => { guia.style("display", "none"); $("evo-tip").hidden = true; });
 }
 
 function bar(a, b) {
@@ -313,6 +424,16 @@ function render() {
   }
   $("tbl").innerHTML = html || `<div class="grp">Aguardando dados do TSE…</div>`;
   paintMap();
+  drawEvo();
+}
+
+for (const k of ["apu", "hora"]) {
+  $("x-" + k).addEventListener("click", () => {
+    eixo = k;
+    $("x-apu").setAttribute("aria-pressed", k === "apu");
+    $("x-hora").setAttribute("aria-pressed", k === "hora");
+    drawEvo();
+  });
 }
 
 // ---------- mapa ----------
