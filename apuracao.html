@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apuração 2º Turno 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: placar nacional no topo, depois uma linha por UF agrupada por região, barra 100% dividida entre os dois candidatos */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --fg: #17191f; --muted: #646a78; --line: #dde0e7;
+  --c22: #2563a8; --c13: #c8402f; --track: #e7e9ee;
+  --m0: #e8eef0; --m1: #11735a;
+  --display: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111318; --surface: #1a1d24; --fg: #eceef3; --muted: #9aa0ad; --line: #2b2f39;
+          --c22: #5b93d8; --c13: #e2694f; --track: #262a33;
+          --m0: #262c31; --m1: #3fc497; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--display); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; display: grid; gap: 22px; }
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 10px; }
+h1 { margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); font-size: .9rem; }
+.status { font-family: var(--mono); font-size: .8rem; color: var(--muted); text-align: right; display: grid; gap: 2px; }
+.status .live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22a35a; margin-right: 6px; vertical-align: 1px; animation: pulse 2s infinite; }
+.status .err { color: var(--c13); }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .status .live::before { animation: none; } .bar span { transition: none !important; } }
+
+.nat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; }
+.cands { display: flex; justify-content: space-between; gap: 16px; }
+.cand { display: grid; gap: 2px; }
+.cand.r { text-align: right; }
+.cand .nm { font-weight: 600; font-size: .95rem; }
+.cand .pct { font-size: 2.6rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.cand .vt { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.c22 { color: var(--c22); } .c13 { color: var(--c13); }
+.bar { position: relative; display: flex; height: 14px; border-radius: 3px; overflow: hidden; background: var(--track); }
+.bar span { transition: width .6s ease; }
+.bar .a { background: var(--c22); } .bar .b { background: var(--c13); }
+.nat .bar { height: 26px; }
+.bar .mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--fg); opacity: .55; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: .85rem; color: var(--muted); }
+.meta b { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+.tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: .85rem; border: 0; background: var(--surface); color: var(--fg); padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg button:focus-visible, .refresh:focus-visible { outline: 2px solid var(--c22); outline-offset: 2px; }
+.refresh { font: inherit; font-size: .85rem; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+
+.table { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 18px 14px; }
+.grp { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 16px 0 6px; border-bottom: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 150px 1fr 120px; align-items: center; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.uf { display: grid; }
+.uf b { font-size: .95rem; }
+.uf small { color: var(--muted); font-size: .75rem; }
+.mid-col { display: grid; gap: 4px; min-width: 0; }
+.lbls { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.lbls .lead { font-weight: 500; }
+.prog { font-family: var(--mono); font-size: .75rem; color: var(--muted); text-align: right; display: grid; gap: 4px; justify-items: end; }
+.mini { width: 100%; height: 4px; background: var(--track); border-radius: 2px; overflow: hidden; }
+.mini i { display: block; height: 100%; background: var(--muted); }
+.mini i.done { background: #22a35a; }
+.legend { display: flex; gap: 16px; font-size: .8rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--k); }
+.map-wrap { display: grid; gap: 10px; }
+.map-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; justify-items: center; }
+#map { width: 100%; max-width: 620px; height: auto; display: block; }
+#map path { stroke: var(--surface); stroke-width: 1; cursor: default; transition: fill .6s ease; }
+#map path:hover, #map path.on { stroke: var(--fg); stroke-width: 1.5; }
+#map text { font-family: var(--mono); font-size: 11px; text-anchor: middle; fill: var(--fg); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+#map text .uf { font-weight: 500; }
+#map text.sm { font-size: 9px; }
+#map line { stroke: var(--muted); stroke-width: .75; }
+.map-leg { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+.map-leg .ramp { width: 180px; height: 8px; border-radius: 2px; background: linear-gradient(90deg, var(--m0), var(--m1)); }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font-size: .78rem; padding: 6px 9px; border-radius: 6px; line-height: 1.35; white-space: nowrap; }
+.regs-wrap { display: grid; gap: 10px; }
+.sec-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+.sec-h h2 { margin: 0; font-size: 1.1rem; font-weight: 800; }
+.regs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.reg { font: inherit; color: inherit; text-align: left; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; }
+.reg:hover { border-color: var(--muted); }
+.reg:focus-visible { outline: 2px solid var(--c22); outline-offset: 2px; }
+.reg[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.reg .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.reg .top b { font-size: 1rem; }
+.reg .top small { color: var(--muted); font-size: .75rem; }
+.reg .vs { display: flex; justify-content: space-between; font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.reg .ft { display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.grp { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.grp em { font-style: normal; font-family: var(--mono); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.clear { font: inherit; font-size: .8rem; border: 0; background: none; color: var(--c22); cursor: pointer; padding: 0; text-decoration: underline; }
+@media (max-width: 820px) { .regs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 460px) { .regs { grid-template-columns: 1fr; } }
+footer { color: var(--muted); font-size: .78rem; }
+footer code { font-family: var(--mono); font-size: .75rem; word-break: break-all; }
+@media (max-width: 620px) {
+  .row { grid-template-columns: 1fr; gap: 6px; }
+  .prog { text-align: left; justify-items: start; }
+  .cand .pct { font-size: 2rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Apuração · Presidente · 2º turno</h1>
+      <div class="sub">Eleições 2026 · 25/10/2026 · dados oficiais do TSE</div>
+    </div>
+    <div class="status">
+      <span id="st" class="live">conectando…</span>
+      <span id="next"></span>
+    </div>
+  </header>
+
+  <section class="nat" aria-label="Resultado nacional">
+    <div class="cands">
+      <div class="cand"><span class="nm c22" id="n22">—</span><span class="pct c22" id="p22">—</span><span class="vt" id="v22"></span></div>
+      <div class="cand r"><span class="nm c13" id="n13">—</span><span class="pct c13" id="p13">—</span><span class="vt" id="v13"></span></div>
+    </div>
+    <div class="bar"><span class="a" id="ba" style="width:50%"></span><span class="b" id="bb" style="width:50%"></span><i class="mid"></i></div>
+    <div class="meta">
+      <span>Seções totalizadas <b id="mst">—</b></span>
+      <span>Votos brancos <b id="mvb">—</b></span>
+      <span>Votos nulos <b id="mvn">—</b></span>
+      <span>Abstenção <b id="mab">—</b></span>
+    </div>
+  </section>
+
+  <section aria-label="Mapa da apuração" class="map-wrap">
+    <div class="sec-h"><h2>Mapa da apuração</h2><span class="sub">% de seções totalizadas em cada estado</span></div>
+    <div class="map-card">
+      <svg id="map" viewBox="0 0 640 600" role="img" aria-label="Mapa do Brasil com o percentual apurado por estado"></svg>
+      <div class="map-leg">
+        <span>0%</span><i class="ramp"></i><span>100%</span>
+      </div>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+  </section>
+
+  <section aria-label="Resultado por região" class="regs-wrap">
+    <div class="sec-h"><h2>Por região</h2><span class="sub" id="reg-hint">Clique em uma região para ver só os estados dela</span></div>
+    <div class="regs" id="regs"></div>
+  </section>
+
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Ordenar estados">
+      <button id="o-reg" aria-pressed="true">Por região</button>
+      <button id="o-apu" aria-pressed="false">% apurado</button>
+      <button id="o-dif" aria-pressed="false">Vantagem</button>
+      <button id="o-ele" aria-pressed="false">Eleitorado</button>
+    </div>
+    <div class="legend" id="legend"></div>
+    <button class="refresh" id="refresh">Atualizar agora</button>
+  </div>
+
+  <section class="table" id="tbl" aria-label="Apuração por estado"></section>
+
+  <footer>Fonte: <code>https://resultados.tse.jus.br/oficial/ele2026/6258/dados/&lt;uf&gt;/&lt;uf&gt;-c0001-e006258-u.json</code> — atualização automática a cada 60 s. Percentuais sobre votos válidos.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const GEO = "https://cdn.jsdelivr.net/gh/codeforamerica/click_that_hood@master/public/data/brazil-states.geojson";
+const BASE = "https://resultados.tse.jus.br/oficial/ele2026/6258/dados";
+const REFRESH = 60;
+const UFS = [
+  ["ac","Acre","Norte"],["am","Amazonas","Norte"],["ap","Amapá","Norte"],["pa","Pará","Norte"],["ro","Rondônia","Norte"],["rr","Roraima","Norte"],["to","Tocantins","Norte"],
+  ["al","Alagoas","Nordeste"],["ba","Bahia","Nordeste"],["ce","Ceará","Nordeste"],["ma","Maranhão","Nordeste"],["pb","Paraíba","Nordeste"],["pe","Pernambuco","Nordeste"],["pi","Piauí","Nordeste"],["rn","Rio Grande do Norte","Nordeste"],["se","Sergipe","Nordeste"],
+  ["df","Distrito Federal","Centro-Oeste"],["go","Goiás","Centro-Oeste"],["ms","Mato Grosso do Sul","Centro-Oeste"],["mt","Mato Grosso","Centro-Oeste"],
+  ["es","Espírito Santo","Sudeste"],["mg","Minas Gerais","Sudeste"],["rj","Rio de Janeiro","Sudeste"],["sp","São Paulo","Sudeste"],
+  ["pr","Paraná","Sul"],["rs","Rio Grande do Sul","Sul"],["sc","Santa Catarina","Sul"],
+  ["zz","Exterior","Exterior"]
+];
+const REGIOES = ["Norte","Nordeste","Centro-Oeste","Sudeste","Sul","Exterior"];
+const $ = id => document.getElementById(id);
+const num = s => Number(String(s ?? "0").replace(",", "."));
+const fmtInt = n => n.toLocaleString("pt-BR");
+const fmtPct = n => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+
+let data = {};       // uf -> parsed
+let order = "reg";
+let regiao = null;   // filtro de região (null = todas)
+
+function somaRegiao(rows) {
+  const s = { a: 0, b: 0, st: 0, ts: 0, te: 0, n: rows.length };
+  for (const r of rows) { s.a += r.a.votos; s.b += r.b.votos; s.st += r.d.st; s.ts += r.d.ts; s.te += r.d.te; }
+  const v = s.a + s.b || 1;
+  s.pa = s.a / v * 100; s.pb = s.b / v * 100; s.pst = s.ts ? s.st / s.ts * 100 : 0;
+  return s;
+}
+let countdown = REFRESH;
+
+function parse(j) {
+  const c = j.carg[0];
+  const cands = {};
+  for (const a of c.agr) for (const p of a.par) for (const x of p.cand)
+    cands[x.n] = { nome: x.nmu, votos: num(x.vap), pct: num(x.pvapn), eleito: x.e === "s" };
+  return {
+    cands,
+    pst: num(j.s?.pstn), st: num(j.s?.st), ts: num(j.s?.ts), est: num(j.e?.est), te: num(j.e?.te),
+    pa: num(j.e?.pan), vb: num(j.v?.pvbn), vn: num(j.v?.ptvnn),
+    hora: `${j.dg} ${j.hg}`
+  };
+}
+
+async function load(uf) {
+  const r = await fetch(`${BASE}/${uf}/${uf}-c0001-e006258-u.json?t=${Date.now() / 60000 | 0}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${uf.toUpperCase()}: HTTP ${r.status}`);
+  return parse(await r.json());
+}
+
+async function refresh() {
+  $("st").textContent = "atualizando…";
+  const jobs = [["br"], ...UFS].map(([uf]) => load(uf).then(d => [uf, d]));
+  const res = await Promise.allSettled(jobs);
+  const fails = res.filter(r => r.status === "rejected");
+  for (const r of res) if (r.status === "fulfilled") data[r.value[0]] = r.value[1];
+  render();
+  const br = data.br;
+  $("st").className = fails.length ? "err" : "live";
+  $("st").textContent = fails.length
+    ? `${fails.length} arquivo(s) falharam · ${fails[0].reason.message}`
+    : `TSE ${br?.hora ?? ""}`;
+  countdown = REFRESH;
+}
+
+function bar(a, b) {
+  const t = a + b || 1;
+  return `<div class="bar"><span class="a" style="width:${a / t * 100}%"></span><span class="b" style="width:${b / t * 100}%"></span><i class="mid"></i></div>`;
+}
+
+function render() {
+  const br = data.br;
+  if (br) {
+    const a = br.cands["22"], b = br.cands["13"];
+    $("n22").textContent = `${a.nome} (22)${a.eleito ? " · eleito" : ""}`;
+    $("n13").textContent = `${b.nome} (13)${b.eleito ? " · eleito" : ""}`;
+    $("p22").textContent = fmtPct(a.pct);
+    $("p13").textContent = fmtPct(b.pct);
+    $("v22").textContent = fmtInt(a.votos) + " votos";
+    $("v13").textContent = fmtInt(b.votos) + " votos";
+    const t = a.votos + b.votos || 1;
+    $("ba").style.width = a.votos / t * 100 + "%";
+    $("bb").style.width = b.votos / t * 100 + "%";
+    $("mst").textContent = fmtPct(br.pst);
+    $("mvb").textContent = fmtPct(br.vb);
+    $("mvn").textContent = fmtPct(br.vn);
+    $("mab").textContent = fmtPct(br.pa);
+    $("legend").innerHTML = `<span style="--k:var(--c22)">${a.nome}</span><span style="--k:var(--c13)">${b.nome}</span>`;
+  }
+
+  const rows = UFS.filter(([uf]) => data[uf]).map(([uf, nome, reg]) => {
+    const d = data[uf], a = d.cands["22"], b = d.cands["13"];
+    return { uf, nome, reg, d, a, b, dif: a.pct - b.pct };
+  });
+  const rowHtml = r => `
+    <div class="row">
+      <div class="uf"><b>${r.uf === "zz" ? "ZZ" : r.uf.toUpperCase()} · ${r.nome}</b><small>${fmtInt(r.d.te)} eleitores</small></div>
+      <div class="mid-col">
+        <div class="lbls">
+          <span class="c22 ${r.dif > 0 ? "lead" : ""}">${fmtPct(r.a.pct)} · ${fmtInt(r.a.votos)}</span>
+          <span class="c13 ${r.dif < 0 ? "lead" : ""}">${fmtInt(r.b.votos)} · ${fmtPct(r.b.pct)}</span>
+        </div>
+        ${bar(r.a.votos, r.b.votos)}
+      </div>
+      <div class="prog"><span>${fmtPct(r.d.pst)} apurado</span><div class="mini"><i class="${r.d.pst >= 100 ? "done" : ""}" style="width:${r.d.pst}%"></i></div></div>
+    </div>`;
+
+  // cards por região
+  const nomes = br ? [br.cands["22"].nome, br.cands["13"].nome] : ["", ""];
+  $("regs").innerHTML = REGIOES.map(reg => {
+    const g = rows.filter(r => r.reg === reg);
+    if (!g.length) return "";
+    const s = somaRegiao(g);
+    return `<button class="reg" data-reg="${reg}" aria-pressed="${regiao === reg}"
+              aria-label="${reg}: ${nomes[0]} ${fmtPct(s.pa)}, ${nomes[1]} ${fmtPct(s.pb)}">
+      <div class="top"><b>${reg}</b><small>${s.n} ${s.n === 1 ? "unidade" : "UFs"} · ${fmtInt(s.te)} eleitores</small></div>
+      <div class="vs"><span class="c22">${fmtPct(s.pa)}</span><span class="c13">${fmtPct(s.pb)}</span></div>
+      ${bar(s.a, s.b)}
+      <div class="ft"><span>${fmtInt(s.a)} × ${fmtInt(s.b)}</span><span>${fmtPct(s.pst)} apurado</span></div>
+    </button>`;
+  }).join("");
+  $("reg-hint").innerHTML = regiao
+    ? `Mostrando só ${regiao} · <button class="clear" id="clear">ver todas</button>`
+    : "Clique em uma região para ver só os estados dela";
+
+  const vis = regiao ? rows.filter(r => r.reg === regiao) : rows;
+  const grpHtml = (reg, g) => {
+    const s = somaRegiao(g);
+    return `<div class="grp"><span>${reg}</span><em><span class="c22">${fmtPct(s.pa)}</span> × <span class="c13">${fmtPct(s.pb)}</span> · ${fmtPct(s.pst)} apurado</em></div>`;
+  };
+  let html = "";
+  if (order === "reg") {
+    for (const reg of REGIOES) {
+      const g = vis.filter(r => r.reg === reg);
+      if (g.length) html += grpHtml(reg, g) + g.map(rowHtml).join("");
+    }
+  } else {
+    const key = { apu: r => -r.d.pst, dif: r => -r.dif, ele: r => -r.d.te }[order];
+    html = vis.slice().sort((x, y) => key(x) - key(y)).map(rowHtml).join("");
+  }
+  $("tbl").innerHTML = html || `<div class="grp">Aguardando dados do TSE…</div>`;
+  paintMap();
+}
+
+// ---------- mapa ----------
+// estados pequenos do litoral: rótulo puxado para o mar com uma linha guia
+const PUXA = { rn: [40, -8], pb: [46, 4], pe: [52, 16], al: [44, 26], se: [36, 34], es: [34, 10], rj: [30, 26], df: [30, -14] };
+let geo = null;
+
+async function initMap() {
+  try { geo = await (await fetch(GEO)).json(); }
+  catch { $("map").outerHTML = `<p class="sub">Não foi possível carregar o contorno dos estados.</p>`; return; }
+  const svg = d3.select("#map");
+  const proj = d3.geoMercator().fitExtent([[10, 10], [590, 590]], geo);
+  const path = d3.geoPath(proj);
+  const g = svg.append("g");
+  g.selectAll("path").data(geo.features).join("path")
+    .attr("d", path)
+    .attr("data-uf", f => f.properties.sigla.toLowerCase())
+    .on("mousemove", (ev, f) => showTip(ev, f.properties.sigla.toLowerCase()))
+    .on("mouseleave", () => { $("tip").hidden = true; });
+  const lb = svg.append("g");
+  for (const f of geo.features) {
+    const uf = f.properties.sigla.toLowerCase();
+    const [cx, cy] = path.centroid(f);
+    const [dx, dy] = PUXA[uf] || [0, 0];
+    if (dx || dy) lb.append("line").attr("x1", cx).attr("y1", cy).attr("x2", cx + dx - 14).attr("y2", cy + dy - 3);
+    const t = lb.append("text").attr("data-uf", uf).attr("x", cx + dx).attr("y", cy + dy)
+      .attr("class", (dx || dy || uf === "df") ? "sm" : null);
+    t.append("tspan").attr("class", "uf").attr("x", cx + dx).text(f.properties.sigla);
+    t.append("tspan").attr("class", "pc").attr("x", cx + dx).attr("dy", "1.1em").text("—");
+  }
+  paintMap();
+}
+
+function corApurado(p) {
+  const cs = getComputedStyle(document.documentElement);
+  return d3.interpolateRgb(cs.getPropertyValue("--m0").trim(), cs.getPropertyValue("--m1").trim())(Math.max(0, Math.min(1, p / 100)));
+}
+
+function paintMap() {
+  if (!geo) return;
+  d3.selectAll("#map path").attr("fill", function () {
+    const d = data[this.dataset.uf];
+    return d ? corApurado(d.pst) : "var(--track)";
+  }).classed("on", function () { return regiao && UFS.find(u => u[0] === this.dataset.uf)?.[2] === regiao; });
+  d3.selectAll("#map text").each(function () {
+    const d = data[this.dataset.uf];
+    d3.select(this).select(".pc").text(d ? d.pst.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%" : "—");
+  });
+}
+
+function showTip(ev, uf) {
+  const d = data[uf]; if (!d) return;
+  const nome = UFS.find(u => u[0] === uf)?.[1] ?? uf.toUpperCase();
+  const a = d.cands["22"], b = d.cands["13"];
+  const tip = $("tip"), box = document.querySelector(".map-card").getBoundingClientRect();
+  tip.innerHTML = `<b>${nome}</b><br>${fmtPct(d.pst)} apurado (${fmtInt(d.st)} de ${fmtInt(d.ts)} seções)<br>${a.nome} ${fmtPct(a.pct)} · ${b.nome} ${fmtPct(b.pct)}`;
+  tip.hidden = false;
+  const x = Math.min(ev.clientX - box.left + 12, box.width - tip.offsetWidth - 8);
+  tip.style.left = Math.max(8, x) + "px";
+  tip.style.top = (ev.clientY - box.top + 14) + "px";
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintMap);
+
+$("regs").addEventListener("click", e => {
+  const b = e.target.closest(".reg");
+  if (!b) return;
+  regiao = regiao === b.dataset.reg ? null : b.dataset.reg;
+  render();
+});
+$("reg-hint").addEventListener("click", e => {
+  if (e.target.id === "clear") { regiao = null; render(); }
+});
+
+for (const k of ["reg", "apu", "dif", "ele"]) {
+  $("o-" + k).addEventListener("click", () => {
+    order = k;
+    document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.id === "o-" + k));
+    render();
+  });
+}
+$("refresh").addEventListener("click", refresh);
+setInterval(() => {
+  countdown--;
+  $("next").textContent = `próxima atualização em ${Math.max(countdown, 0)} s`;
+  if (countdown <= 0) refresh();
+}, 1000);
+initMap();
+refresh();
+</script>
+</body>
+</html>
