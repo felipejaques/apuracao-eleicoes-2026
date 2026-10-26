@@ -106,6 +106,28 @@ h1 { margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; te
 .map-leg { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
 .map-leg .ramp { width: 180px; height: 8px; border-radius: 2px; background: linear-gradient(90deg, var(--m0), var(--m1)); }
 .tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font-size: .78rem; padding: 6px 9px; border-radius: 6px; line-height: 1.35; white-space: nowrap; }
+.cmp-card { justify-items: stretch; gap: 14px; }
+.cmp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cmp-box { display: grid; gap: 6px; padding: 12px; border-radius: 8px; background: var(--bg); }
+.cmp-box h3 { margin: 0; font-size: .85rem; font-weight: 600; }
+.cmp-box dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: .8rem; }
+.cmp-box dt { color: var(--muted); }
+.cmp-box dd { margin: 0; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.cmp-box .delta { font-weight: 600; }
+.up { color: #1f9d55; } .down { color: #c2410c; }
+.cmp-h { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; font-size: .85rem; }
+.cmp-key { color: var(--muted); font-size: .78rem; display: flex; align-items: center; gap: 6px; }
+.cmp-key i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); }
+.cmp-key i.f { background: var(--muted); margin-left: 8px; }
+.cmp-scroll { overflow-x: auto; }
+#cmp { width: 100%; min-width: 520px; height: auto; display: block; }
+#cmp text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+#cmp .uf { fill: var(--fg); font-weight: 500; }
+#cmp .zero { stroke: var(--fg); opacity: .5; stroke-dasharray: 3 3; }
+#cmp .grid { stroke: var(--line); }
+#cmp .row-bg { fill: transparent; }
+#cmp g.r:hover .row-bg { fill: var(--track); }
+@media (max-width: 720px) { .cmp-grid { grid-template-columns: 1fr; } }
 .regs-wrap { display: grid; gap: 10px; }
 .sec-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
 .sec-h h2 { margin: 0; font-size: 1.1rem; font-weight: 800; }
@@ -173,6 +195,19 @@ footer code { font-family: var(--mono); font-size: .75rem; word-break: break-all
       <svg id="evo" viewBox="0 0 720 300" role="img" aria-label="Gráfico de linha com o percentual de votos válidos de cada candidato ao longo da apuração"></svg>
       <span class="sub" id="evo-n"></span>
       <div class="tip" id="evo-tip" hidden></div>
+    </div>
+  </section>
+
+  <section aria-label="Comparação entre 1º e 2º turno" class="map-wrap">
+    <div class="sec-h"><h2>1º turno × 2º turno</h2><span class="sub" id="cmp-sub">1º turno: resultado final de 04/10</span></div>
+    <div class="map-card cmp-card">
+      <div class="cmp-grid" id="cmp-nat"></div>
+      <div class="cmp-h">
+        <b>Vantagem por estado, em pontos percentuais</b>
+        <span class="cmp-key"><i class="o"></i>1º turno <i class="f"></i>2º turno</span>
+      </div>
+      <div class="cmp-scroll"><svg id="cmp" role="img" aria-label="Para cada estado, a vantagem de um candidato sobre o outro no 1º e no 2º turno"></svg></div>
+      <span class="sub" id="cmp-note"></span>
     </div>
   </section>
 
@@ -273,6 +308,84 @@ async function refresh() {
     ? `${fails.length} arquivo(s) falharam · ${fails[0].reason.message}`
     : `TSE ${br?.hora ?? ""}`;
   countdown = REFRESH;
+}
+
+// ---------- 1º × 2º turno ----------
+// O 1º turno (eleição 6257) já está encerrado: carrega uma vez só.
+const BASE1 = "https://resultados.tse.jus.br/oficial/ele2026/6257/dados";
+const data1 = {};
+
+async function loadTurno1() {
+  const res = await Promise.allSettled([["br"], ...UFS].map(([uf]) =>
+    fetch(`${BASE1}/${uf}/${uf}-c0001-e006257-u.json`).then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(j => { data1[uf] = parse(j); })));
+  if (res.some(r => r.status === "rejected")) $("cmp-note").textContent = "Alguns estados do 1º turno não carregaram.";
+  drawCmp();
+}
+
+const sinal = (n, casas = 2) => (n = +n.toFixed(casas), (n > 0 ? "+" : n < 0 ? "−" : "") +
+  Math.abs(n).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }));
+const sinalInt = n => (n > 0 ? "+" : n < 0 ? "−" : "") + fmtInt(Math.abs(n));
+const cls = n => n > 0 ? "up" : n < 0 ? "down" : "";
+
+function drawCmp() {
+  const b1 = data1.br, b2 = data.br;
+  if (!b1 || !b2) return;
+  $("cmp-sub").textContent = `1º turno: resultado final · 2º turno: ${fmtPct(b2.pst)} apurado`;
+
+  const box = (n) => {
+    const c1 = b1.cands[n], c2 = b2.cands[n], cor = n === "22" ? "c22" : "c13";
+    return `<div class="cmp-box"><h3 class="${cor}">${c2.nome} (${n})</h3><dl>
+      <dt>1º turno</dt><dd>${fmtPct(c1.pct)} · ${fmtInt(c1.votos)}</dd>
+      <dt>2º turno</dt><dd>${fmtPct(c2.pct)} · ${fmtInt(c2.votos)}</dd>
+      <dt>Variação</dt><dd class="delta ${cls(c2.pct - c1.pct)}">${sinal(c2.pct - c1.pct)} p.p.</dd>
+      <dt>Votos a mais</dt><dd class="delta ${cls(c2.votos - c1.votos)}">${sinalInt(c2.votos - c1.votos)}</dd>
+    </dl></div>`;
+  };
+  const outros = Object.entries(b1.cands).filter(([n]) => n !== "22" && n !== "13");
+  const vOutros = outros.reduce((s, [, c]) => s + c.votos, 0);
+  const pOutros = outros.reduce((s, [, c]) => s + c.pct, 0);
+  $("cmp-nat").innerHTML = box("22") + box("13") + `<div class="cmp-box"><h3>Eleitorado</h3><dl>
+      <dt>Abstenção</dt><dd>${fmtPct(b1.pa)} → ${fmtPct(b2.pa)}</dd>
+      <dt>Brancos</dt><dd>${fmtPct(b1.vb)} → ${fmtPct(b2.vb)}</dd>
+      <dt>Nulos</dt><dd>${fmtPct(b1.vn)} → ${fmtPct(b2.vn)}</dd>
+      <dt>Demais candidatos</dt><dd>${fmtPct(pOutros)} · ${fmtInt(vOutros)}</dd>
+    </dl></div>`;
+
+  // gráfico de halteres: vantagem (22 − 13) em p.p., 1º turno (aro) → 2º turno (ponto)
+  const linhas = UFS.filter(([uf]) => data1[uf] && data[uf]).map(([uf, nome, reg]) => {
+    const m = d => d.cands["22"].pct - d.cands["13"].pct;
+    return { uf, nome, reg, m1: m(data1[uf]), m2: m(data[uf]), pst: data[uf].pst };
+  });
+  const svg = d3.select("#cmp"); svg.selectAll("*").remove();
+  const W = 720, RH = 22, m = { t: 44, r: 150, b: 8, l: 44 };
+  const H = m.t + linhas.length * RH + m.b;
+  svg.attr("viewBox", `0 0 ${W} ${H}`);
+  const lim = Math.ceil(d3.max(linhas, d => Math.max(Math.abs(d.m1), Math.abs(d.m2))) / 10) * 10 || 10;
+  const x = d3.scaleLinear().domain([-lim, lim]).range([m.l, W - m.r]);
+  const nA = data.br.cands["22"].nome, nB = data.br.cands["13"].nome;
+  for (const v of x.ticks(6)) {
+    svg.append("line").attr("class", v === 0 ? "zero" : "grid").attr("x1", x(v)).attr("x2", x(v)).attr("y1", m.t - 6).attr("y2", H - m.b);
+    svg.append("text").attr("x", x(v)).attr("y", m.t - 12).attr("text-anchor", "middle").text(v === 0 ? "0" : Math.abs(v));
+  }
+  svg.append("text").attr("x", x(-lim)).attr("y", 10).attr("fill", "var(--c13)").style("fill", "var(--c13)").text(`← ${nB} na frente`);
+  svg.append("text").attr("x", x(lim)).attr("y", 10).attr("text-anchor", "end").style("fill", "var(--c22)").text(`${nA} na frente →`);
+  const corDe = v => v >= 0 ? "var(--c22)" : "var(--c13)";
+  linhas.forEach((d, i) => {
+    const y = m.t + i * RH + RH / 2;
+    const g = svg.append("g").attr("class", "r");
+    g.append("rect").attr("class", "row-bg").attr("x", 0).attr("y", y - RH / 2).attr("width", W).attr("height", RH);
+    g.append("title").text(`${d.nome}: 1º turno ${sinal(d.m1)} p.p. → 2º turno ${sinal(d.m2)} p.p. (${fmtPct(d.pst)} apurado)`);
+    g.append("text").attr("class", "uf").attr("x", 8).attr("y", y).attr("dy", "0.32em").text(d.uf.toUpperCase());
+    g.append("line").attr("x1", x(d.m1)).attr("x2", x(d.m2)).attr("y1", y).attr("y2", y)
+      .attr("stroke", "var(--muted)").attr("stroke-width", 2).attr("opacity", .6);
+    g.append("circle").attr("cx", x(d.m1)).attr("cy", y).attr("r", 4.5)
+      .attr("fill", "var(--surface)").style("fill", "var(--surface)").attr("stroke", corDe(d.m1)).attr("stroke-width", 2);
+    g.append("circle").attr("cx", x(d.m2)).attr("cy", y).attr("r", 5).style("fill", corDe(d.m2));
+    g.append("text").attr("x", W - m.r + 12).attr("y", y).attr("dy", "0.32em")
+      .text(`${sinal(d.m1, 1)} → ${sinal(d.m2, 1)}`);
+  });
+  $("cmp-note").textContent = `Vantagem = % de ${nA} − % de ${nB} nos votos válidos. No 1º turno, os demais candidatos também entram no total, por isso os percentuais dos dois somam menos de 100%.`;
 }
 
 // ---------- evolução ----------
@@ -451,6 +564,7 @@ function render() {
   $("tbl").innerHTML = html || `<div class="grp">Aguardando dados do TSE…</div>`;
   paintMap();
   drawEvo();
+  drawCmp();
 }
 
 for (const k of ["apu", "hora"]) {
@@ -548,6 +662,7 @@ setInterval(() => {
 }, 1000);
 initMap();
 refresh();
+loadTurno1();
 </script>
 <!-- GoatCounter: contagem de visitas, sem cookies (painel em https://felipejaques.goatcounter.com) -->
 <script data-goatcounter="https://felipejaques.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
