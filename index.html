@@ -128,6 +128,29 @@ h1 { margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; te
 #cmp .row-bg { fill: transparent; }
 #cmp g.r:hover .row-bg { fill: var(--track); }
 @media (max-width: 720px) { .cmp-grid { grid-template-columns: 1fr; } }
+.org-card { justify-items: stretch; gap: 14px; }
+.org-lead { margin: 0; font-size: .95rem; max-width: 70ch; }
+.org-lead b { font-variant-numeric: tabular-nums; }
+.flow { display: grid; gap: 10px; }
+.flow-row { display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: center; }
+.flow-row > span { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.stack { display: flex; height: 34px; border-radius: 4px; overflow: hidden; gap: 2px; }
+.stack div { display: flex; align-items: center; padding: 0 8px; min-width: 0; color: #fff; font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stack .s-elim { background: #6b5bb5; } .stack .s-comp { background: #2b8a82; } .stack .s-bn { background: #8a8f9c; }
+.stack .s-22 { background: var(--c22); } .stack .s-13 { background: var(--c13); }
+.flow-key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); }
+.flow-key span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--k); }
+.flow-key b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; }
+.org-elim { display: flex; flex-wrap: wrap; gap: 6px; font-size: .78rem; }
+.org-elim span { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+.org-elim b { font-family: var(--mono); font-weight: 500; }
+.org-tbl { width: 100%; min-width: 560px; border-collapse: collapse; font-size: .8rem; }
+.org-tbl th { text-align: right; font-weight: 600; color: var(--muted); font-size: .72rem; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.org-tbl th:first-child, .org-tbl td:first-child { text-align: left; }
+.org-tbl td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.org-tbl td:first-child { font-family: var(--display); font-weight: 600; }
+.org-tbl .ratio { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.org-tbl .ratio i { display: inline-block; height: 6px; border-radius: 2px; background: var(--c13); }
 .regs-wrap { display: grid; gap: 10px; }
 .sec-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
 .sec-h h2 { margin: 0; font-size: 1.1rem; font-weight: 800; }
@@ -211,6 +234,18 @@ footer code { font-family: var(--mono); font-size: .75rem; word-break: break-all
     </div>
   </section>
 
+  <section aria-label="De onde vieram os votos" class="map-wrap">
+    <div class="sec-h"><h2>De onde vieram os votos</h2><span class="sub">Saldo do 1º para o 2º turno</span></div>
+    <div class="map-card org-card">
+      <p class="org-lead" id="org-lead">Aguardando os dados dos dois turnos…</p>
+      <div class="flow" id="org-flow"></div>
+      <div class="org-elim" id="org-elim"></div>
+      <div class="cmp-h"><b>Por estado</b><span class="sub">Ganho de cada candidato comparado aos votos que os eliminados tiveram no estado</span></div>
+      <div class="cmp-scroll"><table class="org-tbl" id="org-tbl"></table></div>
+      <span class="sub">O voto é secreto: estes números mostram saldos. Se um eleitor trocou de Flávio para Lula e outro fez o contrário, as duas trocas se anulam e não aparecem aqui.</span>
+    </div>
+  </section>
+
   <section aria-label="Mapa da apuração" class="map-wrap">
     <div class="sec-h"><h2>Mapa da apuração</h2><span class="sub">% de seções totalizadas em cada estado</span></div>
     <div class="map-card">
@@ -284,6 +319,7 @@ function parse(j) {
     cands,
     pst: num(j.s?.pstn), st: num(j.s?.st), ts: num(j.s?.ts), est: num(j.e?.est), te: num(j.e?.te),
     pa: num(j.e?.pan), vb: num(j.v?.pvbn), vn: num(j.v?.ptvnn),
+    comp: num(j.e?.c), brancos: num(j.v?.vb), nulos: num(j.v?.tvn),
     hora: `${j.dg} ${j.hg}`
   };
 }
@@ -321,6 +357,7 @@ async function loadTurno1() {
       .then(j => { data1[uf] = parse(j); })));
   if (res.some(r => r.status === "rejected")) $("cmp-note").textContent = "Alguns estados do 1º turno não carregaram.";
   drawCmp();
+  drawOrigem();
 }
 
 const sinal = (n, casas = 2) => (n = +n.toFixed(casas), (n > 0 ? "+" : n < 0 ? "−" : "") +
@@ -386,6 +423,67 @@ function drawCmp() {
       .text(`${sinal(d.m1, 1)} → ${sinal(d.m2, 1)}`);
   });
   $("cmp-note").textContent = `Vantagem = % de ${nA} − % de ${nB} nos votos válidos. No 1º turno, os demais candidatos também entram no total, por isso os percentuais dos dois somam menos de 100%.`;
+}
+
+// ---------- de onde vieram os votos ----------
+// Identidade: ganho dos dois finalistas = votos dos eliminados + aumento do
+// comparecimento + queda de brancos e nulos (comparecimento = válidos + brancos + nulos).
+function fontes(d1, d2) {
+  const elim = Object.entries(d1.cands).filter(([n]) => n !== "22" && n !== "13").reduce((s, [, c]) => s + c.votos, 0);
+  return {
+    elim,
+    comp: d2.comp - d1.comp,
+    bn: (d1.brancos + d1.nulos) - (d2.brancos + d2.nulos),
+    g22: d2.cands["22"].votos - d1.cands["22"].votos,
+    g13: d2.cands["13"].votos - d1.cands["13"].votos
+  };
+}
+
+function drawOrigem() {
+  const b1 = data1.br, b2 = data.br;
+  if (!b1 || !b2) return;
+  const f = fontes(b1, b2);
+  const nA = b2.cands["22"].nome, nB = b2.cands["13"].nome;
+  const total = f.g22 + f.g13;
+  // quanto dos eliminados o maior ganhador precisou receber, mesmo ficando com todo o resto
+  const [gm, nm] = f.g13 >= f.g22 ? [f.g13, nB] : [f.g22, nA];
+  const minElim = Math.max(0, gm - Math.max(0, f.comp) - Math.max(0, f.bn));
+  const mi = n => (n / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mi";
+  $("org-lead").innerHTML = `Juntos, os dois finalistas ganharam <b>${fmtInt(total)}</b> votos do 1º para o 2º turno. ` +
+    `${nm} ficou com <b>${Math.round(gm / total * 100)}%</b> desse ganho (${mi(gm)}). ` +
+    (f.elim > 0 ? `Mesmo que todo o aumento do comparecimento e toda a queda de brancos e nulos tivessem ido para ${nm}, ` +
+      `ainda faltariam ${mi(minElim)}, que só podem ter vindo dos eliminados: <b>pelo menos ${Math.round(minElim / f.elim * 100)}%</b> dos votos deles, em saldo.` : "") +
+    (b2.pst < 100 ? ` <span class="sub">(2º turno com ${fmtPct(b2.pst)} apurado)</span>` : "");
+
+  const seg = (cls, v, txt) => v > 0 ? `<div class="${cls}" style="flex:${v}" title="${txt}: ${fmtInt(v)}">${txt} · ${mi(v)}</div>` : "";
+  $("org-flow").innerHTML = `
+    <div class="flow-row"><span>Fontes</span><div class="stack">
+      ${seg("s-elim", f.elim, "Eliminados")}${seg("s-comp", f.comp, "Comparecimento")}${seg("s-bn", f.bn, "Brancos e nulos")}</div></div>
+    <div class="flow-row"><span>Destino</span><div class="stack">
+      ${seg("s-22", f.g22, nA)}${seg("s-13", f.g13, nB)}</div></div>
+    <div class="flow-key">
+      <span style="--k:#6b5bb5">Votos dos eliminados no 1º turno <b>${fmtInt(f.elim)}</b></span>
+      <span style="--k:#2b8a82">Mais comparecimento <b>${sinalInt(f.comp)}</b></span>
+      <span style="--k:#8a8f9c">Menos brancos e nulos <b>${sinalInt(f.bn)}</b></span>
+      <span style="--k:var(--c22)">${nA} <b>${sinalInt(f.g22)}</b></span>
+      <span style="--k:var(--c13)">${nB} <b>${sinalInt(f.g13)}</b></span>
+    </div>`;
+
+  $("org-elim").innerHTML = Object.entries(b1.cands).filter(([n]) => n !== "22" && n !== "13")
+    .sort((x, y) => y[1].votos - x[1].votos).slice(0, 5)
+    .map(([n, c]) => `<span>${c.nome} (${n}) <b>${fmtInt(c.votos)}</b></span>`).join("");
+
+  const linhas = UFS.filter(([uf]) => data1[uf] && data[uf]).map(([uf, nome]) => ({ uf, nome, ...fontes(data1[uf], data[uf]) }))
+    .map(r => ({ ...r, ratio: r.elim ? r.g13 / r.elim : 0 }))
+    .sort((a, b) => b.ratio - a.ratio);
+  const maxR = d3.max(linhas, r => r.ratio) || 1;
+  $("org-tbl").innerHTML = `<thead><tr><th>UF</th><th>Votos dos eliminados</th><th class="c22">${nA}</th><th class="c13">${nB}</th>
+      <th>Comparecimento</th><th>Brancos e nulos</th><th>${nB} ÷ eliminados</th></tr></thead><tbody>` +
+    linhas.map(r => `<tr title="${r.nome}"><td>${r.uf.toUpperCase()}</td><td>${fmtInt(r.elim)}</td>
+      <td class="c22">${sinalInt(r.g22)}</td><td class="c13">${sinalInt(r.g13)}</td>
+      <td>${sinalInt(r.comp)}</td><td>${sinalInt(r.bn)}</td>
+      <td><span class="ratio"><i style="width:${Math.max(0, r.ratio) / maxR * 60}px"></i>${r.ratio.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></td></tr>`).join("") +
+    "</tbody>";
 }
 
 // ---------- evolução ----------
@@ -565,6 +663,7 @@ function render() {
   paintMap();
   drawEvo();
   drawCmp();
+  drawOrigem();
 }
 
 for (const k of ["apu", "hora"]) {
